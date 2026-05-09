@@ -76,8 +76,10 @@ WantedBy=multi-user.target
 
     # 6. 设置权限并启动
     print("\n[6/6] 启动服务...")
-    run(f"chown -R www-data:www-data {APP_DIR}")
+    run(f"chown -R www-data:www-data {APP_DIR}/uploads")
+    run(f"chown -R www-data:www-data {APP_DIR}/venv")
     run(f"chown -R www-data:www-data {LOG_DIR}")
+    run(f"chmod -R o+rX {APP_DIR}")  # 让 www-data 可读项目文件
     run("systemctl restart pindou")
 
     # 检查状态
