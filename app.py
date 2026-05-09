@@ -13,16 +13,25 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
-def find_nearest_color(r, g, b, palette):
-    """找到与给定RGB最接近的MARD颜色"""
-    min_dist = float('inf')
-    nearest_code = None
-    for code, (pr, pg, pb) in palette.items():
-        dist = (r - pr) ** 2 + (g - pg) ** 2 + (b - pb) ** 2
-        if dist < min_dist:
-            min_dist = dist
-            nearest_code = code
-    return nearest_code
+def build_palette_arrays(palette):
+    """将调色板转为 numpy 数组，用于向量化计算"""
+    codes = list(palette.keys())
+    colors = np.array([palette[c] for c in codes], dtype=np.float32)
+    return codes, colors
+
+
+def find_nearest_colors_batch(pixels_rgb, palette_codes, palette_colors):
+    """批量找到每个像素最近的颜色（向量化，分块避免内存溢出）"""
+    chunk_size = 10000
+    all_indices = []
+    pixels = pixels_rgb.astype(np.float32)
+    for start in range(0, len(pixels), chunk_size):
+        chunk = pixels[start:start + chunk_size]
+        diff = chunk[:, np.newaxis, :] - palette_colors[np.newaxis, :, :]
+        dists = np.sum(diff ** 2, axis=2)
+        all_indices.append(np.argmin(dists, axis=1))
+    indices = np.concatenate(all_indices)
+    return [palette_codes[i] for i in indices]
 
 
 def image_to_beads(img, grid_width, grid_height, max_colors=60, bg_transparent=True):
@@ -33,50 +42,68 @@ def image_to_beads(img, grid_width, grid_height, max_colors=60, bg_transparent=T
     img_resized = img.resize((grid_width, grid_height), Image.LANCZOS)
     pixels = np.array(img_resized)
 
-    # 第一轮：为每个像素找最近的颜色，统计颜色使用次数
+    alpha = pixels[:, :, 3]  # (H, W)
+    rgb = pixels[:, :, :3]   # (H, W, 3)
+
+    # 标记透明像素
+    if bg_transparent:
+        transparent_mask = alpha < 128
+    else:
+        transparent_mask = np.zeros((grid_height, grid_width), dtype=bool)
+
+    # 获取非透明像素
+    opaque_mask = ~transparent_mask
+    opaque_rgb = rgb[opaque_mask]  # (N, 3)
+
+    # 第一轮：向量化颜色匹配
+    palette_codes, palette_colors = build_palette_arrays(MARD_PALETTE)
+    matched_codes = find_nearest_colors_batch(opaque_rgb, palette_codes, palette_colors)
+
+    # 写入 grid_data
+    grid_data = [[None] * grid_width for _ in range(grid_height)]
     color_count = {}
-    grid_data = []
-
+    idx = 0
     for y in range(grid_height):
-        row = []
         for x in range(grid_width):
-            r, g, b, a = pixels[y, x]
-            if bg_transparent and a < 128:
-                row.append(None)  # 透明/背景
-            else:
-                code = find_nearest_color(int(r), int(g), int(b), MARD_PALETTE)
-                row.append(code)
+            if opaque_mask[y, x]:
+                code = matched_codes[idx]
+                grid_data[y][x] = code
                 color_count[code] = color_count.get(code, 0) + 1
-        grid_data.append(row)
+                idx += 1
 
-    # 限制最大颜色数：保留使用次数最多的颜色
+    # 限制最大颜色数
     if len(color_count) > max_colors:
         sorted_colors = sorted(color_count.items(), key=lambda x: -x[1])
         keep_colors = set(code for code, _ in sorted_colors[:max_colors])
-        # 构建精简调色板
         reduced_palette = {k: v for k, v in MARD_PALETTE.items() if k in keep_colors}
 
         # 第二轮：用精简调色板重新匹配
+        r_codes, r_colors = build_palette_arrays(reduced_palette)
+        matched_codes = find_nearest_colors_batch(opaque_rgb, r_codes, r_colors)
+
+        grid_data = [[None] * grid_width for _ in range(grid_height)]
         color_count = {}
-        grid_data = []
+        idx = 0
         for y in range(grid_height):
-            row = []
             for x in range(grid_width):
-                r, g, b, a = pixels[y, x]
-                if bg_transparent and a < 128:
-                    row.append(None)
-                else:
-                    code = find_nearest_color(int(r), int(g), int(b), reduced_palette)
-                    row.append(code)
+                if opaque_mask[y, x]:
+                    code = matched_codes[idx]
+                    grid_data[y][x] = code
                     color_count[code] = color_count.get(code, 0) + 1
-            grid_data.append(row)
+                    idx += 1
 
     return grid_data, color_count
 
 
 def render_pattern(grid_data, color_count, grid_width, grid_height, show_codes=True):
     """渲染拼豆设计图为PNG图片"""
-    cell_size = 36
+    # 大尺寸时自动缩小格子
+    if max(grid_width, grid_height) > 200:
+        cell_size = 12
+    elif max(grid_width, grid_height) > 100:
+        cell_size = 20
+    else:
+        cell_size = 36
     header_size = 24  # 行列标号区域
     legend_height = max(100, (math.ceil(len(color_count) / 6) + 1) * 30)
 
@@ -199,8 +226,8 @@ def convert():
     if file.filename == '':
         return jsonify({'error': '未选择文件'}), 400
 
-    grid_width = int(request.form.get('grid_width', 29))
-    grid_height = int(request.form.get('grid_height', 29))
+    grid_width = min(int(request.form.get('grid_width', 29)), 500)
+    grid_height = min(int(request.form.get('grid_height', 29)), 500)
     max_colors = int(request.form.get('max_colors', 30))
     show_codes = request.form.get('show_codes', 'true') == 'true'
 
