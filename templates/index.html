@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>拼豆设计图生成器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+            padding: 40px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 28px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 32px;
+            font-size: 14px;
+        }
+        .upload-area {
+            border: 3px dashed #ddd;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 24px;
+            background: #fafafa;
+        }
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f8f4fc;
+        }
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: #eef0ff;
+        }
+        .upload-area img {
+            max-width: 300px;
+            max-height: 200px;
+            border-radius: 8px;
+            margin-top: 12px;
+        }
+        .upload-icon {
+            font-size: 48px;
+            color: #ccc;
+            margin-bottom: 12px;
+        }
+        .upload-text {
+            color: #666;
+            font-size: 16px;
+        }
+        .settings {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .setting-item {
+            display: flex;
+            flex-direction: column;
+        }
+        .setting-item label {
+            font-size: 13px;
+            color: #555;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+        .setting-item input, .setting-item select {
+            padding: 10px 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        .setting-item input:focus, .setting-item select:focus {
+            outline: none;
+            border-color: #764ba2;
+        }
+        .checkbox-item {
+            flex-direction: row;
+            align-items: center;
+            gap: 8px;
+        }
+        .checkbox-item input {
+            width: 18px;
+            height: 18px;
+        }
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(118, 75, 162, 0.4);
+        }
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .result {
+            margin-top: 32px;
+            text-align: center;
+            display: none;
+        }
+        .result img {
+            max-width: 100%;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .result-actions {
+            margin-top: 16px;
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+        .btn-secondary {
+            padding: 10px 24px;
+            background: #f0f0f0;
+            color: #333;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .loading .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #764ba2;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 12px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .preset-sizes {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .preset-btn {
+            padding: 6px 14px;
+            background: #f0f0f0;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .preset-btn:hover {
+            background: #764ba2;
+            color: white;
+            border-color: #764ba2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>拼豆设计图生成器</h1>
+        <p class="subtitle">上传图片，自动转换为 MARD 拼豆色号设计图</p>
+
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📷</div>
+            <p class="upload-text">点击或拖拽上传图片</p>
+            <p style="color: #aaa; font-size: 12px; margin-top: 8px;">支持 JPG / PNG / BMP / WebP</p>
+            <img id="preview" style="display:none;">
+        </div>
+        <input type="file" id="fileInput" accept="image/*" style="display:none;">
+
+        <div class="preset-sizes">
+            <span style="font-size: 13px; color: #666; line-height: 30px;">快捷尺寸：</span>
+            <button class="preset-btn" onclick="setSize(29,29)">29×29 (小板)</button>
+            <button class="preset-btn" onclick="setSize(50,50)">50×50 (大板)</button>
+            <button class="preset-btn" onclick="setSize(58,58)">58×58 (超大)</button>
+            <button class="preset-btn" onclick="setSize(29,58)">29×58 (双板竖)</button>
+            <button class="preset-btn" onclick="setSize(58,29)">58×29 (双板横)</button>
+        </div>
+
+        <div class="settings">
+            <div class="setting-item">
+                <label>宽度（格数）</label>
+                <input type="number" id="gridWidth" value="29" min="10" max="100">
+            </div>
+            <div class="setting-item">
+                <label>高度（格数）</label>
+                <input type="number" id="gridHeight" value="29" min="10" max="100">
+            </div>
+            <div class="setting-item">
+                <label>最大颜色数</label>
+                <input type="number" id="maxColors" value="30" min="5" max="100">
+            </div>
+            <div class="setting-item checkbox-item">
+                <input type="checkbox" id="showCodes" checked>
+                <label for="showCodes">显示色号</label>
+            </div>
+        </div>
+
+        <button class="btn" id="convertBtn" onclick="convert()" disabled>生成拼豆设计图</button>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p style="color: #666;">正在生成设计图...</p>
+        </div>
+
+        <div class="result" id="result">
+            <h3 style="margin-bottom: 16px; color: #333;">生成结果</h3>
+            <img id="resultImg">
+            <div class="result-actions">
+                <button class="btn-secondary" onclick="downloadResult()">下载图片</button>
+                <button class="btn-secondary" onclick="resetAll()">重新开始</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const preview = document.getElementById('preview');
+        const convertBtn = document.getElementById('convertBtn');
+        let selectedFile = null;
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                alert('请选择图片文件');
+                return;
+            }
+            selectedFile = file;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                preview.src = e.target.result;
+                preview.style.display = 'block';
+                uploadArea.querySelector('.upload-icon').style.display = 'none';
+                uploadArea.querySelector('.upload-text').textContent = file.name;
+                convertBtn.disabled = false;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function setSize(w, h) {
+            document.getElementById('gridWidth').value = w;
+            document.getElementById('gridHeight').value = h;
+        }
+
+        async function convert() {
+            if (!selectedFile) return;
+
+            const loading = document.getElementById('loading');
+            const result = document.getElementById('result');
+            loading.style.display = 'block';
+            result.style.display = 'none';
+            convertBtn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('image', selectedFile);
+            formData.append('grid_width', document.getElementById('gridWidth').value);
+            formData.append('grid_height', document.getElementById('gridHeight').value);
+            formData.append('max_colors', document.getElementById('maxColors').value);
+            formData.append('show_codes', document.getElementById('showCodes').checked ? 'true' : 'false');
+
+            try {
+                const response = await fetch('/convert', { method: 'POST', body: formData });
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.error || '转换失败');
+                }
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                document.getElementById('resultImg').src = url;
+                result.style.display = 'block';
+            } catch (e) {
+                alert('错误: ' + e.message);
+            } finally {
+                loading.style.display = 'none';
+                convertBtn.disabled = false;
+            }
+        }
+
+        function downloadResult() {
+            const img = document.getElementById('resultImg');
+            const a = document.createElement('a');
+            a.href = img.src;
+            a.download = 'bead_pattern.png';
+            a.click();
+        }
+
+        function resetAll() {
+            selectedFile = null;
+            preview.style.display = 'none';
+            uploadArea.querySelector('.upload-icon').style.display = 'block';
+            uploadArea.querySelector('.upload-text').textContent = '点击或拖拽上传图片';
+            convertBtn.disabled = true;
+            document.getElementById('result').style.display = 'none';
+            fileInput.value = '';
+        }
+    </script>
+</body>
+</html>
