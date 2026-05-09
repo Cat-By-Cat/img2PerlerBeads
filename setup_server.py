@@ -28,23 +28,27 @@ def main():
     print("=" * 50)
 
     # 1. 安装系统依赖
-    print("\n[1/6] 安装系统依赖...")
+    print("\n[1/4] 安装系统依赖...")
     run("apt-get update -qq")
-    run("apt-get install -y -qq python3 python3-venv python3-pip nginx")
+    run("apt-get install -y -qq python3 python3-venv python3-pip")
 
     # 2. 创建虚拟环境
-    print("\n[2/6] 创建 Python 虚拟环境...")
+    print("\n[2/4] 创建 Python 虚拟环境...")
     if not os.path.exists(f"{APP_DIR}/venv"):
         run(f"python3 -m venv {APP_DIR}/venv")
     run(f"{APP_DIR}/venv/bin/pip install --quiet flask Pillow numpy gunicorn")
 
-    # 3. 创建目录
-    print("\n[3/6] 创建目录...")
+    # 3. 创建目录 + 权限
+    print("\n[3/4] 创建目录与设置权限...")
     os.makedirs(f"{APP_DIR}/uploads", exist_ok=True)
     os.makedirs(LOG_DIR, exist_ok=True)
+    run(f"chown -R www-data:www-data {APP_DIR}/uploads")
+    run(f"chown -R www-data:www-data {APP_DIR}/venv")
+    run(f"chown -R www-data:www-data {LOG_DIR}")
+    run(f"chmod -R o+rX {APP_DIR}")
 
-    # 4. 写入 systemd 配置（动态替换路径）
-    print("\n[4/6] 配置系统服务...")
+    # 4. 配置 systemd 服务并启动
+    print("\n[4/4] 配置系统服务...")
     service_content = f"""[Unit]
 Description=PinDou Bead Pattern Generator
 After=network.target
@@ -65,21 +69,6 @@ WantedBy=multi-user.target
         f.write(service_content)
     run("systemctl daemon-reload")
     run("systemctl enable pindou")
-
-    # 5. 配置 nginx
-    print("\n[5/6] 配置 Nginx...")
-    run(f"cp {APP_DIR}/nginx_pindou.conf /etc/nginx/sites-available/pindou")
-    run("ln -sf /etc/nginx/sites-available/pindou /etc/nginx/sites-enabled/pindou")
-    run("rm -f /etc/nginx/sites-enabled/default")
-    if run("nginx -t"):
-        run("systemctl reload nginx")
-
-    # 6. 设置权限并启动
-    print("\n[6/6] 启动服务...")
-    run(f"chown -R www-data:www-data {APP_DIR}/uploads")
-    run(f"chown -R www-data:www-data {APP_DIR}/venv")
-    run(f"chown -R www-data:www-data {LOG_DIR}")
-    run(f"chmod -R o+rX {APP_DIR}")  # 让 www-data 可读项目文件
     run("systemctl restart pindou")
 
     # 检查状态
@@ -95,7 +84,7 @@ WantedBy=multi-user.target
 
     print("\n" + "=" * 50)
     print("  部署完成！")
-    print("  访问: http://<你的服务器IP>")
+    print("  访问: http://<你的服务器IP>:6666")
     print("=" * 50)
 
 
