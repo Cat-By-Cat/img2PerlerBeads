@@ -84,7 +84,7 @@ WantedBy=multi-user.target
 
     print("\n" + "=" * 50)
     print("  部署完成！")
-    print("  访问: http://<你的服务器IP>:6666")
+    print("  访问: http://<你的服务器IP>:8666")
     print("=" * 50)
 
 
