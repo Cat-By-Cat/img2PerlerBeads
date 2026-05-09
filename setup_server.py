@@ -81,8 +81,15 @@ WantedBy=multi-user.target
     run("systemctl restart pindou")
 
     # 检查状态
-    print("\n检查服务状态...")
-    run("systemctl is-active pindou")
+    import time
+    print("\n检查服务状态（等待3秒）...")
+    time.sleep(3)
+    result = subprocess.run("systemctl is-active pindou", shell=True, capture_output=True, text=True)
+    status = result.stdout.strip()
+    print(f"  服务状态: {status}")
+    if status != "active":
+        print("  服务未正常启动，查看日志：")
+        run("journalctl -u pindou -n 20 --no-pager", check=False)
 
     print("\n" + "=" * 50)
     print("  部署完成！")
