@@ -222,12 +222,13 @@
         <div class="settings">
             <div class="setting-item">
                 <label>宽度（格数）</label>
-                <input type="number" id="gridWidth" value="29" min="10" max="100">
+                <input type="number" id="gridWidth" value="29" min="10" max="500">
             </div>
             <div class="setting-item">
                 <label>高度（格数）</label>
-                <input type="number" id="gridHeight" value="29" min="10" max="100">
+                <input type="number" id="gridHeight" value="29" min="10" max="500">
             </div>
+            <input type="hidden" id="keepRatio" value="true">
             <div class="setting-item">
                 <label>最大颜色数</label>
                 <input type="number" id="maxColors" value="30" min="5" max="100">
@@ -238,7 +239,10 @@
             </div>
         </div>
 
-        <button class="btn" id="convertBtn" onclick="convert()" disabled>生成拼豆设计图</button>
+        <div style="display: flex; gap: 12px;">
+            <button class="btn" id="convertBtn" onclick="convert()" disabled style="flex:1;">生成拼豆设计图</button>
+            <button class="btn-secondary" onclick="resetAll()" style="padding: 14px 24px; border-radius: 10px;">重新开始</button>
+        </div>
 
         <div class="loading" id="loading">
             <div class="spinner"></div>
@@ -250,7 +254,6 @@
             <img id="resultImg">
             <div class="result-actions">
                 <button class="btn-secondary" onclick="downloadResult()">下载图片</button>
-                <button class="btn-secondary" onclick="resetAll()">重新开始</button>
             </div>
         </div>
     </div>
@@ -261,6 +264,7 @@
         const preview = document.getElementById('preview');
         const convertBtn = document.getElementById('convertBtn');
         let selectedFile = null;
+        let imgRatio = 1;  // 图片宽高比
 
         uploadArea.addEventListener('click', () => fileInput.click());
         uploadArea.addEventListener('dragover', (e) => {
@@ -297,6 +301,24 @@
                 uploadArea.querySelector('.upload-icon').style.display = 'none';
                 uploadArea.querySelector('.upload-text').textContent = file.name;
                 convertBtn.disabled = false;
+                // 获取图片真实尺寸，长边对齐当前设定值，短边按比例计算
+                const tmpImg = new Image();
+                tmpImg.onload = () => {
+                    imgRatio = tmpImg.width / tmpImg.height;
+                    if (document.getElementById('keepRatio').value === 'true') {
+                        const maxSide = parseInt(document.getElementById('gridWidth').value) || 29;
+                        if (imgRatio >= 1) {
+                            // 横版图：宽为长边
+                            document.getElementById('gridWidth').value = maxSide;
+                            document.getElementById('gridHeight').value = Math.round(maxSide / imgRatio);
+                        } else {
+                            // 竖版图：高为长边
+                            document.getElementById('gridHeight').value = maxSide;
+                            document.getElementById('gridWidth').value = Math.round(maxSide * imgRatio);
+                        }
+                    }
+                };
+                tmpImg.src = e.target.result;
             };
             reader.readAsDataURL(file);
         }
@@ -304,7 +326,22 @@
         function setSize(w, h) {
             document.getElementById('gridWidth').value = w;
             document.getElementById('gridHeight').value = h;
+            document.getElementById('keepRatio').value = 'false';
         }
+
+        document.getElementById('gridWidth').addEventListener('input', () => {
+            if (document.getElementById('keepRatio').value === 'true' && imgRatio) {
+                const w = parseInt(document.getElementById('gridWidth').value) || 29;
+                document.getElementById('gridHeight').value = Math.round(w / imgRatio);
+            }
+        });
+
+        document.getElementById('gridHeight').addEventListener('input', () => {
+            if (document.getElementById('keepRatio').value === 'true' && imgRatio) {
+                const h = parseInt(document.getElementById('gridHeight').value) || 29;
+                document.getElementById('gridWidth').value = Math.round(h * imgRatio);
+            }
+        });
 
         async function convert() {
             if (!selectedFile) return;
@@ -321,6 +358,7 @@
             formData.append('grid_height', document.getElementById('gridHeight').value);
             formData.append('max_colors', document.getElementById('maxColors').value);
             formData.append('show_codes', document.getElementById('showCodes').checked ? 'true' : 'false');
+            formData.append('keep_ratio', document.getElementById('keepRatio').value);
 
             try {
                 const response = await fetch('/convert', { method: 'POST', body: formData });

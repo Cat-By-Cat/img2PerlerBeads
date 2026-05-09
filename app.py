@@ -35,39 +35,46 @@ def find_nearest_colors_batch(pixels_rgb, palette_codes, palette_colors):
 
 
 def image_to_beads(img, grid_width, grid_height, max_colors=60, bg_transparent=True):
-    """将图像转换为拼豆设计数据"""
-    # 转为RGBA以处理透明度
+    """将图像转换为拼豆设计数据，图片按比例缩放居中，空余留白"""
     img = img.convert('RGBA')
-    # 缩放到目标格子尺寸
-    img_resized = img.resize((grid_width, grid_height), Image.LANCZOS)
+    img_w, img_h = img.size
+
+    # 按比例缩放，适应网格，不拉伸
+    scale = min(grid_width / img_w, grid_height / img_h)
+    fit_w = max(1, round(img_w * scale))
+    fit_h = max(1, round(img_h * scale))
+    img_resized = img.resize((fit_w, fit_h), Image.LANCZOS)
     pixels = np.array(img_resized)
 
-    alpha = pixels[:, :, 3]  # (H, W)
-    rgb = pixels[:, :, :3]   # (H, W, 3)
+    # 居中偏移
+    offset_x = (grid_width - fit_w) // 2
+    offset_y = (grid_height - fit_h) // 2
+
+    alpha = pixels[:, :, 3]
+    rgb = pixels[:, :, :3]
 
     # 标记透明像素
     if bg_transparent:
         transparent_mask = alpha < 128
     else:
-        transparent_mask = np.zeros((grid_height, grid_width), dtype=bool)
+        transparent_mask = np.zeros((fit_h, fit_w), dtype=bool)
 
-    # 获取非透明像素
     opaque_mask = ~transparent_mask
-    opaque_rgb = rgb[opaque_mask]  # (N, 3)
+    opaque_rgb = rgb[opaque_mask]
 
     # 第一轮：向量化颜色匹配
     palette_codes, palette_colors = build_palette_arrays(MARD_PALETTE)
     matched_codes = find_nearest_colors_batch(opaque_rgb, palette_codes, palette_colors)
 
-    # 写入 grid_data
+    # 写入 grid_data（整个画布初始化为 None）
     grid_data = [[None] * grid_width for _ in range(grid_height)]
     color_count = {}
     idx = 0
-    for y in range(grid_height):
-        for x in range(grid_width):
+    for y in range(fit_h):
+        for x in range(fit_w):
             if opaque_mask[y, x]:
                 code = matched_codes[idx]
-                grid_data[y][x] = code
+                grid_data[offset_y + y][offset_x + x] = code
                 color_count[code] = color_count.get(code, 0) + 1
                 idx += 1
 
@@ -77,18 +84,17 @@ def image_to_beads(img, grid_width, grid_height, max_colors=60, bg_transparent=T
         keep_colors = set(code for code, _ in sorted_colors[:max_colors])
         reduced_palette = {k: v for k, v in MARD_PALETTE.items() if k in keep_colors}
 
-        # 第二轮：用精简调色板重新匹配
         r_codes, r_colors = build_palette_arrays(reduced_palette)
         matched_codes = find_nearest_colors_batch(opaque_rgb, r_codes, r_colors)
 
         grid_data = [[None] * grid_width for _ in range(grid_height)]
         color_count = {}
         idx = 0
-        for y in range(grid_height):
-            for x in range(grid_width):
+        for y in range(fit_h):
+            for x in range(fit_w):
                 if opaque_mask[y, x]:
                     code = matched_codes[idx]
-                    grid_data[y][x] = code
+                    grid_data[offset_y + y][offset_x + x] = code
                     color_count[code] = color_count.get(code, 0) + 1
                     idx += 1
 
